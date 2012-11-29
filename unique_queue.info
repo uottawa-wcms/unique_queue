@@ -1,0 +1,10 @@
+name = Unique Queue
+description = "Provides a method of adding unique items to a queue, that then
+executes each item."
+core = 7.x
+package = Utility
+
+files[] = classes/UniqueQueue.inc
+files[] = classes/SimpleUniqueQueue.inc
+
+version = "7.x-1.0-alpha1"

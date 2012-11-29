@@ -1,0 +1,11 @@
+<?php
+
+  function unique_queue_cron() {
+    db_update('unique_queue_items')
+      ->fields(array(
+        'consumer_id' => 0,
+        'lock_expires' => NULL
+      ))
+      ->condition('lock_expires', time(), '<')
+      ->execute();
+  }

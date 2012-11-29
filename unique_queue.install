@@ -1,0 +1,109 @@
+<?php
+
+/**
+ * Implements hook_schema().
+ */
+function unique_queue_schema() {
+  return array(
+    'unique_queue_items' => _unique_queue_schema_items(),
+    'unique_queue_consumers' => _unique_queue_schema_consumers(),
+  );
+}
+
+/**
+ * Table definition for unique_queue_consumers
+ */
+function _unique_queue_schema_consumers() {
+  return array(
+    'fields' => array(
+      'consumer_id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+    ),
+    'primary key' => array(
+      'consumer_id',
+    ),
+    'unique keys' => array(),
+    'indexes' => array(),
+  );
+}
+
+/**
+ * Table definition for unique_queue_items
+ */
+function _unique_queue_schema_items() {
+  return array(
+    'fields' => array(
+      'item_id' => array(
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'size' => 'big',
+      ),
+      'item_uuid' => array(
+        'type' => 'char',
+        'length' => 96,
+        'not null' => FALSE,
+        'serialize' => FALSE,
+        'binary' => FALSE,
+        'default' => NULL,
+      ),
+      'queue_name' => array(
+        'type' => 'char',
+        'length' => 96,
+        'not null' => TRUE,
+        'serialize' => FALSE,
+        'binary' => FALSE,
+      ),
+      'priority' => array(
+        'type' => 'int',
+        'size' => 'normal',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'consumer_id' => array(
+        'type' => 'int',
+        'size' => 'big',
+        'unsigned' => FALSE,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'data' => array(
+        'type' => 'text',
+        'size' => 'big',
+        'not null' => TRUE,
+        'serialize' => FALSE,
+        'binary' => FALSE,
+      ),
+      'lock_expires' => array(
+        'type' => 'int',
+        'size' => 'big',
+        'unsigned' => FALSE,
+        'not null' => FALSE,
+        'default' => NULL,
+      ),
+      'created' => array(
+        'type' => 'int',
+        'size' => 'big',
+        'unsigned' => FALSE,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array(
+      'item_id',
+    ),
+    'unique keys' => array(
+      'uuid_queue' => array(
+        'item_uuid',
+        'queue_name',
+      ),
+    ),
+    'indexes' => array(
+      'priority' => array('priority'),
+    ),
+    'description' => 'List of items in the queue',
+  );
+}
