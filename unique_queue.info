@@ -5,5 +5,5 @@ core = 7.x
 
 files[] = classes/UniqueQueue.inc
 files[] = classes/DBUniqueQueue.inc
-
 files[] = tests/unique_queue.test
+
