@@ -1,11 +1,9 @@
 <?php
 
-  function unique_queue_cron() {
-    db_update('unique_queue_items')
-      ->fields(array(
-        'consumer_id' => 0,
-        'lock_expires' => NULL
-      ))
-      ->condition('lock_expires', time(), '<')
-      ->execute();
-  }
+ /**
+  * Implements hook_cron().
+  */
+function unique_queue_cron() {
+  // On cron, we want to clean up all the locks that have expired.
+  UniqueQueue::triggerFreeLocks();
+}

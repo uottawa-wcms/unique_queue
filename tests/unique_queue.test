@@ -1,0 +1,257 @@
+<?php
+
+/**
+ * Common test cases for the unique queue.
+ */
+class UniqueQueueWebTestCase extends DrupalWebTestCase {
+
+  /**
+   * Implements getInfo() for this test case.
+   */
+  public static function getInfo() {
+    return array(
+      'name' => 'Unique Queue unit tests',
+      'description' => 'Test that the unique queue module is functioning properly',
+      'group' => 'Unique Queue',
+    );
+  }
+
+  /**
+   * Implements setUp() for this test case.
+   */
+  public function setUp() {
+    parent::setUp('unique_queue');
+  }
+
+  /**
+   * Tests the creation of a queue.
+   */
+  public function testQueueCreation() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $this->assertTrue(is_subclass_of($queue, 'UniqueQueue'), t('Default queue
+      object is an implementation of UniqueQueue.'));
+  }
+
+  /**
+   * Tests that we can create a queue twice with the same name and that
+   * they will be identical objects (same memory reference).
+   */
+  public function testQueueUniqueness() {
+    $testname = $this->randomName(16);
+    $queue = UniqueQueue::get($testname);
+    $queue2 = UniqueQueue::get($testname);
+    $this->assertIdentical($queue, $queue2, t('Proper implementation of the
+      multiton pattern.'));
+  }
+
+  /**
+   * Tests the basic queue process: queues an item, verifies it's in queue,
+   * then verifies we can dequeue it and that the data is identical.
+   */
+  public function testQueueBasicProcess() {
+    $data = $this->randomString(512);
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $this->assertTrue($queue->createItem($data), t('Item is added to queue'));
+    $this->assertTrue($queue->itemsLeft(), t('Queue has an item in it.'));
+    $item = $queue->claimItem();
+    $this->assertTrue(is_object($item), t('Queue claim returned an item'));
+    $this->assertTrue($item->item_id, t('Queue claim item has an ID'));
+    $this->assertIdentical($data, $item->data, t('Returned data is identical'));
+    $this->assertFalse($queue->itemsLeft(), t('The queue is now empty'));
+    $this->assertTrue($queue->deleteItem($item), t('The item was deleted successfully after processing'));
+  }
+
+  /**
+   * Tests that the highest priority of an item is preserved when adding the
+   * same item to the queue multiple times.
+   */
+  public function testQueuePriorityPreservation() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $value = $this->randomString(512);
+    $key = $this->randomString(64);
+    $this->assertTrue($queue->createItem($value, $key, 100), t('Queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('Exactly one item in queue'));
+    $this->assertTrue($queue->createItem($value, $key, 10), t('Queue item updated successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('Still exactly one item in queue'));
+    $this->assertIdentical($queue->itemsLeft(50), 1, t('Exactly one item above priority level 50'));
+    $this->assertIdentical($value, $queue->claimItem(3600, 50)->data, t('Data matches after claimItem()'));
+  }
+
+  /**
+   * Test that the unique filter works to update priority.
+   */
+  public function testQueuePriorityUpdate() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $value = $this->randomString(512);
+    $key = $this->randomString(64);
+    $this->assertTrue($queue->createItem($value, $key, 10), t('Queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('Exactly one item in queue'));
+    $this->assertTrue($queue->createItem($value, $key, 100), t('Queue item updated successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('Still exactly one item in queue'));
+    $this->assertIdentical($queue->itemsLeft(50), 1, t('Exactly one item above priority level 50'));
+    $this->assertIdentical($value, $queue->claimItem(3600, 50)->data, t('Data matches after claimItem()'));
+  }
+
+  /**
+   *  Tests that the unique filter works, using serialization.
+   */
+  public function testQueueSerializedUniqueFilter() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $test_value = array(
+      'test1' => $this->randomString(512),
+      'test2' => rand(500, 50000),
+    );
+    $this->assertTrue($queue->createItem($test_value, TRUE), t('Queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('There is exactly one item in the queue'));
+    $this->assertTrue($queue->createItem($test_value, TRUE), t('Identical queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('There is still one item in the queue'));
+    $this->assertIdentical($queue->claimItem()->data, $test_value, t('Claimed value is the same'));
+    $this->assertFalse($queue->itemsLeft(), t('There are no more items in the queue'));
+    $this->assertFalse($queue->claimItem(), t('We cannot claim a second item'));
+  }
+
+  /**
+   * Tests that the unique filter works, using keys.
+   */
+  public function testQueueKeyedUniqueFilter() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $test_value1 = array(
+      '1' => $this->randomString(512),
+      '2' => rand(500, 50000),
+    );
+    $test_value2 = array(
+      '3' => $this->randomString(512),
+      '4' => rand(500, 50000),
+    );
+    $key = $this->randomString(64);
+    $this->assertTrue($queue->createItem($test_value1, $key), t('Queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('There is exactly one item in the queue'));
+    $this->assertTrue($queue->createItem($test_value2, $key), t('Identical queue item added successfully'));
+    $this->assertIdentical($queue->itemsLeft(), 1, t('There is still one item in the queue'));
+    $this->assertIdentical($queue->claimItem()->data, $test_value1, t('Claimed value is the same as the first item'));
+    $this->assertFalse($queue->itemsLeft(), t('There are no more items in the queue'));
+    $this->assertFalse($queue->claimItem(), t('We cannot claim a second item'));
+  }
+
+  /**
+   * Tests that the priority filtering works for itemsLeft() and for claimItem().
+   */
+  public function testQueuePriorityFilteringAndCounts() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $test1 = $this->randomString(512);
+    $test2 = $this->randomString(512);
+    $test3 = $this->randomString(512);
+    $test4 = $this->randomString(512);
+    $test5 = $this->randomString(512);
+    $queue->createItem($test1, NULL, -10);
+    $queue->createItem($test2);
+    $queue->createItem($test3, NULL, 10);
+    $queue->createItem($test4, NULL, 10);
+    $queue->createItem($test5, NULL, 99);
+    $this->assertIdentical(1, $queue->itemsLeft(99), t('One item at maximum priority'));
+    $this->assertIdentical(0, $queue->itemsLeft(100), t('None at over the maximum'));
+    $this->assertIdentical(1, $queue->itemsLeft(95), t('One item at slightly below maximum priority'));
+    $this->assertIdentical(3, $queue->itemsLeft(10), t('Three items at exactly the higher priority'));
+    $this->assertIdentical(4, $queue->itemsLeft(0), t('Negative results are excluded by explictly providing 0'));
+    $this->assertIdentical(5, $queue->itemsLeft(), t('Negative results are included in a call with no parameters '));
+    $this->assertIdentical(5, $queue->itemsLeft(-10), t('Negative results included in low enough negative priority'));
+    $item = $queue->claimItem(3600, 100);
+    $this->assertFalse($item, t('No item returned for over maximum priority'));
+    $item = $queue->claimItem(3600, 99);
+    $this->assertEqual($item->data, $test5, t('First value is identical'));
+    $item = $queue->claimItem(3600, 99);
+    $this->assertFalse($item, t('No item returned once first value claimed'));
+    $item = $queue->claimItem(3600, 10);
+    $this->assertEqual($item->data, $test3, t('Items added at same priority are sorted by order added'));
+  }
+
+  /**
+   *  Tests that the priority ordering works as expected.
+   */
+  public function testQueuePriorityOrdering() {
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    $test1 = $this->randomString(512);
+    $test2 = $this->randomString(512);
+    $test3 = $this->randomString(512);
+    $test4 = $this->randomString(512);
+    $queue->createItem($test3);
+    $queue->createItem($test4, NULL, -10);
+    $queue->createItem($test2, NULL, 2);
+    $queue->createItem($test1, NULL, 1);
+    $item = $queue->claimItem();
+    $this->assertIdentical($test2, $item->data, t('Highest priority data is first'));
+    $item = $queue->claimItem();
+    $this->assertIdentical($test1, $item->data, t('Second priority data is next'));
+    $item = $queue->claimItem();
+    $this->assertIdentical($test3, $item->data, t('No priority data is third'));
+    $item = $queue->claimItem();
+    $this->assertIdentical($test4, $item->data, t('Negative priority data is below no priority data'));
+  }
+
+  /**
+   * Tests that the queue properly serializes of various types and that
+   * items are dequeued in the proper FIFO sequence.
+   */
+  public function testQueueDataTypesAndOrder() {
+    $test_data = array(
+      'string' => $this->randomString(512),
+      'integer, negative' => rand(-10000000, -1),
+      'integer, positive' => rand(1, 1000000),
+      'integer, zero' => 0,
+      'empty string' => '',
+      'boolean, true' => TRUE,
+      'boolean, false' => FALSE,
+      'null' => NULL,
+      'array' => array(),
+      'deep array' => array(),
+      'assoc array' => array(),
+    );
+    $array_entries = rand(2,100);
+    for ($k = 0; $k < $array_entries; $k++) {
+      $test_data['array'][] = $this->randomString(512);
+      if ($k % 2) {
+        $nested = array();
+        $sub_entries = rand(3,50);
+        for ($k = 0; $k < $sub_entries; $k++) {
+          $nested[] = $this->randomString(256);
+        }
+        $test_data['deep array'][] = $nested;
+      } else {
+        // use name to allow us to use this to test objects next
+        $key = $this->randomName(32);
+        $test_data['assoc array'][$key] = $this->randomString(512);
+      }
+    }
+    $test_data['object'] = (object) $test_data['assoc array'];
+
+    $queue = UniqueQueue::get($this->randomName(16));
+    $queue->deleteQueue();
+    foreach ($test_data as $type => $data) {
+      $this->assertTrue($queue->createItem($data), t('Item of type @type created', array(
+        '@type' => $type,
+      )));
+    }
+    $this->assertEqual(count($test_data), $queue->itemsLeft(), t('Number of items matches'));
+
+    $continue = TRUE;
+    $position = 0;
+    $keys = array_keys($test_data);
+    while ($position < count($test_data)) {
+      $item = $queue->claimItem();
+      $this->assertTrue($item, t('Able to retrieve queue item'));
+      $this->assertIdentical($test_data[$keys[$position]], $item->data, t('Data is identical for type @type', array(
+        '@type' => $keys[$position],
+      )));
+      $position++;
+    }
+
+  }
+
+}

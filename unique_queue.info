@@ -1,10 +1,9 @@
 name = Unique Queue
-description = "Provides a method of adding unique items to a queue, that then
-executes each item."
+description = "Provides an extended API for unique queues and prioritized
+queues."
 core = 7.x
-package = Utility
 
 files[] = classes/UniqueQueue.inc
-files[] = classes/SimpleUniqueQueue.inc
+files[] = classes/DBUniqueQueue.inc
 
-version = "7.x-1.0-alpha1"
+files[] = tests/unique_queue.test
