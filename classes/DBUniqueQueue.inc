@@ -11,11 +11,11 @@ class DBUniqueQueue extends UniqueQueue {
   /**
    * Sets the name of the queue.
    *
-   * Private constructor enforces a factory pattern on queues.
+   * Protected constructor enforces a factory pattern on queues.
    *
    * @param string $name Name of the queue
    */
-  private function __construct($name) {
+  protected function __construct($name) {
     parent::__construct($name);
   }
 
@@ -63,7 +63,7 @@ class DBUniqueQueue extends UniqueQueue {
     ));
     $q->condition('queue_name', $this->queue_name);
     $q->condition('item_uuid', $unique_token);
-    $row = $rs->execute()->fetchObject();
+    $row = $q->execute()->fetchObject();
     if (empty($row)) {
       return UNIQUE_QUEUE_MISSING;
     } elseif ($row->priority < $priority) {
@@ -105,13 +105,14 @@ class DBUniqueQueue extends UniqueQueue {
    */
   protected function updatePriority($unique_token, $priority = 0) {
     if (empty($unique_token)) { return FALSE; }
-    !empty(db_update('unique_queue_items')
+    $results = db_update('unique_queue_items')
       ->condition('queue_name', $this->queue_name)
       ->condition('item_uuid', $unique_token)
       ->fields(array(
         'priority' => $priority,
       ))
-      ->execute());
+      ->execute();
+    return !empty($results);
   }
 
   /**

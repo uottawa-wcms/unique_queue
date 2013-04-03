@@ -151,11 +151,11 @@ abstract class UniqueQueue {
   /**
    * Initializes the queue object by settings the name of the queue.
    *
-   * Private constructor for factory pattern and partial singleton.
+   * Protected constructor for factory pattern and partial singleton.
    *
    * @param string $name The unique name of the queue.
    */
-  private function __construct($name) {
+  protected function __construct($name) {
     $this->queue_name = $name;
   }
 
