@@ -123,7 +123,7 @@ class DBUniqueQueue extends UniqueQueue {
   public function itemsLeft($min_priority = NULL) {
     $q = db_select('unique_queue_items');
     $q->condition('queue_name', $this->queue_name);
-    $q->isNotNull('consumer_id');
+    $q->isNull('consumer_id');
     if ($min_priority !== NULL && $min_priority !== FALSE) {
       $q->condition('priority', $min_priority, '>=');
     }
