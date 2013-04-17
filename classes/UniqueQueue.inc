@@ -68,7 +68,7 @@ define('UNIQUE_QUEUE_MATCH', 'match');
  * - You can always call this on any queue to erase all the items from it.
  *
  */
-abstract class UniqueQueue {
+abstract class UniqueQueue implements DrupalQueueInterface {
 
   /**
    * Create a new instance of a queue.
@@ -77,7 +77,7 @@ abstract class UniqueQueue {
    * created. The default class is DBUniqueQueue. You can override this setting
    * using the unique_queue_default_implementation variable. You can also
    * override it on a case-by-case basis using the second parameter of this
-   * module.
+   * function.
    *
    * We also enforce a multiton (or registry of singletons) pattern using
    * drupal_static which ensures there is only ever one instance of any given
@@ -125,12 +125,47 @@ abstract class UniqueQueue {
    *
    */
   public static function triggerFreeLocks($queue_names = NULL) {
-    $queues = drupal_static('unique_queue_queues', array());
-    foreach ($queues as $queue_name => $queue) {
-      if (empty($queue_names) || in_array($queue_name, $queue_names)) {
-        $queue->freeLocks();
+    $queues = UniqueQueue::getAllQueues();
+    foreach ($queues as $classname => $queue_list) {
+      foreach ($queue_list as $queue_name) {
+        if (empty($queue_names) || in_array($queue_name, $queue_names)) {
+          $queue = UniqueQueue::get($queue_name, $classname);
+          $queue->freeLocks();
+        }
       }
     }
+  }
+
+  /**
+   * Retrieves a list of all queues that are registered using registerQueue().
+   * These queues are used to free up locks and to provide UI reports.
+   *
+   * Implementations can add their queues to this list using
+   * hook_unique_queue_list().
+   *
+   * @return array An array of queue names, in the following format:
+   * - classname:
+   *   - queue_name_1
+   *   - queue_name_2
+   *   - queue_name_3
+   */
+  public static function getAllQueues() {
+    $queues = drupal_static('unique_queue_list', array());
+    if (empty($queues)) {
+      $modules = module_implements('unique_queue_list');
+      foreach ($modules as $module) {
+        $hook = $module . '_unique_queue_list';
+        $results = $hook();
+        foreach ($results as $classname => $list_of_queues) {
+          if (empty($queues[$classname])) {
+            $queues[$classname] = $list_of_queues;
+          } else {
+            $queues[$classname] = array_unique(array_merge($queues[$classname], $list_of_queues));
+          }
+        }
+      }
+    }
+    return $queues;
   }
 
   /**
@@ -151,13 +186,33 @@ abstract class UniqueQueue {
   /**
    * Initializes the queue object by settings the name of the queue.
    *
-   * Protected constructor for factory pattern and partial singleton.
-   *
    * @param string $name The unique name of the queue.
    */
-  protected function __construct($name) {
+  public function __construct($name) {
     $this->queue_name = $name;
+    $this->registerQueue();
   }
+
+  /**
+   * Retrieves the queue name.
+   *
+   * We hide this behind a function so that the queue name cannot be externally
+   * manipulated.
+   *
+   * @return string The name of this queue.
+   */
+  public function queueName() {
+    return $this->queue_name;
+  }
+
+  /**
+   * Registers the queue name with the data storage method so that we can find
+   * all the queues later.
+   *
+   * Data storage implementations should implement hook_unique_queue_list() to
+   * return a list of all queues registered using this function.
+   */
+  abstract protected function registerQueue();
 
   /**
    * Creates an item within the queue.
@@ -280,6 +335,18 @@ abstract class UniqueQueue {
   /**
    * Returns the number of items left in the queue.
    *
+   * Added to support DrupalQueueInterface.
+   */
+  public function numberOfItems() {
+    return $this->itemsLeft();
+  }
+
+  /**
+   * Returns the number of items left in the queue.
+   *
+   * @deprecated In favour of using numberOfItems().
+   * @todo Remove this method once I've moved everything over to numberOfItems().
+   *
    * @param int|NULL $min_priority The minimum priority to check for objects. If
    *   NULL, priority will not be used as a factor.
    *
@@ -369,6 +436,34 @@ abstract class UniqueQueue {
    *   the priority will be of at least that value.
    */
   protected abstract function peek($min_priority = NULL);
+
+  /**
+   * Retrieves a list of all items currently in the queue, without locking them.
+   *
+   * Methods that use this to get queue items should NOT process the queue
+   * items. This function exists for informational purposes only!
+   *
+   * @return array An interable of queue objects.
+   */
+  public abstract function listItems();
+
+  /**
+   * Retrieves details on an item without locking it.
+   *
+   * Methods that use this should NOT process the queue item. This function
+   * exists for informational purposes only!
+   *
+   * @param string $uuid The UUID to lookup
+   *
+   * @return stdClass An object with all the details of a queue object:
+   * - item_uuid: The UUID of the item
+   * - priority: The numeric priority of the item
+   * - consumer_id: The current owner of the item, or empty if unowned
+   * - data: The unserialized data of the item
+   * - lock_expires: The time that the lock expires or empty if unlocked
+   * - created: The time the object was created
+   */
+  public abstract function itemPeek($uuid);
 
   /**
    * Checks to see if $unique_token exists in the queue already with at least

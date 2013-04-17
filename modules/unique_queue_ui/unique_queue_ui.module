@@ -1,0 +1,96 @@
+<?php
+
+/**
+ * Implements hook_permission().
+ */
+function unique_queue_ui_permission() {
+  return array(
+    'unique queue ui' => array(
+      'title' => t('Manage unique queue items'),
+      'description' => t('Allows a user to manage the items in a unique queue'),
+      'restrict access' => TRUE,
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function unique_queue_ui_menu() {
+  $common = array(
+    'file' => 'unique_queue_ui.admin.inc',
+    'access arguments' => array('unique queue ui'),
+  );
+  return array(
+    'admin/config/system/unique_queue' => array(
+      'title' => 'Unique Queues',
+      'description' => 'Manage queue items',
+      'page callback' => 'unique_queue_ui_list',
+    ) + $common,
+    'admin/config/system/unique_queue/%unique_queue' => array(
+      'title callback' => 'unique_queue_ui_title',
+      'title arguments' => array(4, 'view'),
+      'type' => MENU_NORMAL_ITEM,
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('unique_queue_ui_queue_form', 4),
+    ) + $common,
+    'admin/config/system/unique_queue/%unique_queue/%unique_queue_item' => array(
+      'title callback' => 'unique_queue_ui_title',
+      'title arguments' => array(4, 'view item'),
+      'type' => MENU_NORMAL_ITEM,
+      'page callback' => 'unique_queue_view_item',
+      'page arguments' => array(5, 4),
+      'load arguments' => array(4),
+    ) + $common,
+  );
+}
+
+/**
+ * Title callback for queue page.
+ */
+function unique_queue_ui_title($queue, $op) {
+  if ($op == 'clear') {
+    return t('Clear Queue: @queue', array(
+      '@queue' => $queue['queue_name'],
+    ));
+  } elseif ($op == 'view item') {
+    return t('View Queue Item: @queue', array(
+      '@queue' => $queue['queue_name'],
+    ));
+  } else {
+    return t('View Queue: @queue', array(
+      '@queue' => $queue['queue_name'],
+    ));
+  }
+}
+
+/**
+ * Load callback for a queue name.
+ */
+function unique_queue_load($queue_name) {
+  $queues = UniqueQueue::getAllQueues();
+  foreach ($queues as $class => $queue_list) {
+    if (in_array($queue_name, $queue_list)) {
+      return array(
+        'classname' => $class,
+        'queue_name' => $queue_name,
+      );
+    }
+  }
+  return FALSE;
+}
+
+/**
+ * Load callback for a queue item based on UUID and the name of the queue.
+ */
+function unique_queue_item_load($item_uuid, $queue_name) {
+  $queue_def = unique_queue_load($queue_name);
+  if (empty($queue_def)) {
+    return FALSE;
+  }
+  $queue = UniqueQueue::get($queue_def['queue_name'], $queue_def['classname']);
+  if (empty($queue)) {
+    return FALSE;
+  }
+  return $queue->itemPeek($item_uuid);
+}

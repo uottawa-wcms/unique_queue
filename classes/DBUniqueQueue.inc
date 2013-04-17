@@ -15,9 +15,14 @@ class DBUniqueQueue extends UniqueQueue {
    *
    * @param string $name Name of the queue
    */
-  protected function __construct($name) {
+  public function __construct($name) {
     parent::__construct($name);
   }
+
+  /**
+   * Stub implementation of DrupalQueueInterface::createQueue().
+   */
+  public function createQueue() {}
 
   /**
    * Frees all locks that have expired for this queue.
@@ -25,7 +30,7 @@ class DBUniqueQueue extends UniqueQueue {
   protected function freeLocks() {
     $q = db_update('unique_queue_items');
     $q->fields(array(
-      'consumer_id' => 0,
+      'consumer_id' => NULL,
       'lock_expires' => NULL,
     ));
     $q->condition('lock_expires', time(), '<');
@@ -43,6 +48,38 @@ class DBUniqueQueue extends UniqueQueue {
    */
   protected function generateUniqueToken($unique_token) {
     return hash('sha384', $unique_token);
+  }
+
+  /**
+   * Called when the queue is created to ensure the name is tracked for
+   * calls to release locks.
+   */
+  protected function registerQueue() {
+    db_merge('unique_queue_queues')
+        ->fields(array(
+          'queue_name' => $this->queue_name,
+        ))
+        ->key(array(
+          'queue_name' => $this->queue_name,
+        ))
+        ->execute();
+  }
+
+  /**
+   * Releases an item that the worker could not process, so another worker can
+   * come in and process it.
+   *
+   * @param object $item An object as returned by claimItem().
+   * @return boolean TRUE if the object was released, otherwise FALSE
+   */
+  public function releaseItem($item) {
+    return !!db_update('unique_queue_items')
+        ->condition('item_id', $item->item_id)
+        ->fields(array(
+          'consumer_id' => NULL,
+          'lock_expires' => NULL,
+        ))
+        ->execute();
   }
 
   /**
@@ -217,6 +254,57 @@ class DBUniqueQueue extends UniqueQueue {
     return !!db_delete('unique_queue_items')
       ->condition('queue_name', $this->queue_name)
       ->execute();
+  }
+
+  /**
+   * Retrieves a list of all items currently in the queue, without locking them.
+   *
+   * Methods that use this to get queue items should NOT process the queue
+   * items. This function exists for informational purposes only!
+   *
+   * @return array An interable of queue objects.
+   */
+  public function listItems() {
+    return db_select('unique_queue_items', 'uqi')
+        ->fields('uqi', array(
+          'item_uuid',
+          'priority',
+          'consumer_id',
+          'lock_expires',
+          'created',
+          'item_id',
+        ))
+        ->condition('queue_name', $this->queue_name)
+        ->orderBy('priority', 'DESC')
+        ->orderBy('created', 'ASC')
+        // fallback sort for things created at the same time index.
+        ->orderBy('item_id', 'ASC')
+        ->execute();
+  }
+
+  /**
+   * Retrieves details on an item without locking it.
+   *
+   * Methods that use this should NOT process the queue item. This function
+   * exists for informational purposes only!
+   *
+   * @param string $uuid The UUID to lookup
+   *
+   * @return stdClass An object with all the details of a queue object:
+   * - item_uuid: The UUID of the item
+   * - priority: The numeric priority of the item
+   * - consumer_id: The current owner of the item, or empty if unowned
+   * - data: The unserialized data of the item
+   * - lock_expires: The time that the lock expires or empty if unlocked
+   * - created: The time the object was created
+   */
+  public function itemPeek($uuid) {
+    return db_select('unique_queue_items', 'uqi')
+        ->fields('uqi')
+        ->condition('item_uuid', $uuid)
+        ->condition('queue_name', $this->queue_name)
+        ->execute()
+        ->fetchObject();
   }
 
 }

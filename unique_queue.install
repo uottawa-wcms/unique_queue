@@ -7,6 +7,27 @@ function unique_queue_schema() {
   return array(
     'unique_queue_items' => _unique_queue_schema_items(),
     'unique_queue_consumers' => _unique_queue_schema_consumers(),
+    'unique_queue_queues' => _unique_queue_schema_queues(),
+  );
+}
+
+/**
+ * Table definition for unique_queue_queues
+ */
+function _unique_queue_schema_queues() {
+  return array(
+    'fields' => array(
+      'queue_name' => array(
+        'type' => 'varchar',
+        'length' => 255,
+        'not null' => TRUE,
+      ),
+    ),
+    'primary key' => array(
+      'queue_name',
+    ),
+    'unique keys' => array(),
+    'indexes' => array(),
   );
 }
 

@@ -1,0 +1,5 @@
+name = Unique Queue UI
+description = Provides an admin interface for managing queued items
+core = 7.x
+
+dependencies[] = unique_queue

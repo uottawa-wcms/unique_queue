@@ -1,9 +1,25 @@
 <?php
 
- /**
-  * Implements hook_cron().
-  */
+/**
+ * Implements hook_cron().
+ */
 function unique_queue_cron() {
   // On cron, we want to clean up all the locks that have expired.
   UniqueQueue::triggerFreeLocks();
+}
+
+/**
+ * Implements hook_unique_queue_list().
+ */
+function unique_queue_unique_queue_list() {
+  $queues = array(
+    'DBUniqueQueue' => array(),
+  );
+  $rs = db_select('unique_queue_queues', 'uqq')
+      ->fields('uqq')
+      ->execute();
+  foreach ($rs as $row) {
+    $queues['DBUniqueQueue'][] = $row->queue_name;
+  }
+  return $queues;
 }
