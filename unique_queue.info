@@ -7,17 +7,3 @@ files[] = classes/UniqueQueue.inc
 files[] = classes/DBUniqueQueue.inc
 files[] = tests/unique_queue.test
 
-
-
-; Information added by drush on 2013-03-21
-version = "unknown"
-project = "unique_queue"
-datestamp = "1363875943"
-
-
-
-; Information added by drush on 2013-04-05
-version = "unknown"
-project = "unique_queue"
-datestamp = "1365172759"
-
